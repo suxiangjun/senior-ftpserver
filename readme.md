@@ -17,17 +17,16 @@
 
 ```php+HTML
 ├──ftp-client                # 客户端
-│      └──ftp_client.py          #  ftp客户端执行程序     
+│      └──ftp_client.py      #  ftp客户端执行程序     
 │                   
 │
 ├──ftp-server                #服务端
 │      │──bin                       
-│      │   ├──myftp.py      #  ftp服务端执行程序   
+│      │   ├──myftp.py       #  ftp服务端执行程序   
 │      │   └──__init__.py
 │      │──conf                       
-│      │   ├──setting.py      #  ftp服务端配置   
+│      │   ├──setting.py     #  ftp服务端配置   
 │      │   └──__init__.py
-
 │      └──data               # 用户数据存储的地方
 │      │    ├──password.bak  # 存所有用户的账户数据基本数据
 │      │	├──password.dat
