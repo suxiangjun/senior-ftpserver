@@ -5,9 +5,11 @@ import socket,os,shelve,sys,time,logging
 basedir=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 user_basedir=basedir+'/home/'
 sys.path.append(basedir)
+from conf import setting
 class MyTCPHandler(socketserver.BaseRequestHandler):
-    #用户登陆控制
+
     user_now_dir="/"
+    #用户登陆控制
     def user_login(self):
         self.username=self.request.recv(1024).decode()
         f=shelve.open(basedir+'/data/password')
@@ -22,7 +24,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             # self.username_password.append(self)  #[username,password,self]
             f[self.username_password[0]]=self.username_password
             f.close()
-            self.request.send("恭喜你注册成功，请重新登陆。".encode())
+            self.request.send("恭喜你注册成功。".encode())
             self.log("新注册%s用户"%self.username)
         else:
             self.request.send(str(["欢迎回来",f[self.username][1]]).encode())
@@ -36,19 +38,29 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         filename = cmd_dic["filename"]
         filesize = cmd_dic["size"]
         user_dir=user_basedir+cmd_dic["username"]+self.user_now_dir+"/"
-        if os.path.isfile(user_dir+filename):
-            f = open(user_dir+filename + ".new","wb")
+        self.max_size=setting.user_space*1024*1024
+        a= os.path.join(user_basedir,cmd_dic["username"])
+        if "\\" in a:
+            a="\\\\".join(a.split("\\"))
+        print(a)
+        print("目录大小：",self.get_dir_size(a))
+        if filesize+self.get_dir_size(a)<self.max_size:
+            if os.path.isfile(user_dir+filename):
+                f = open(user_dir+filename + ".new","wb")
+            else:
+                f = open(user_dir+filename , "wb")
+            self.request.send(b"200 ok")
+            received_size = 0
+            while received_size < filesize:
+                data = self.request.recv(1024)
+                f.write(data)
+                received_size += len(data)
+            else:
+                print("file [%s] has uploaded..." % filename)
+                self.log("{}成功上传{}文件".format(cmd_dic["username"], filename))
         else:
-            f = open(user_dir+filename , "wb")
-        self.request.send(b"200 ok")
-        received_size = 0
-        while received_size < filesize:
-            data = self.request.recv(1024)
-            f.write(data)
-            received_size += len(data)
-        else:
-            print("file [%s] has uploaded..." % filename)
-            self.log("{}成功上传{}文件".format(cmd_dic["username"], filename))
+            remaining_size=(self.max_size-self.get_dir_size(user_basedir+cmd_dic["username"]))/1024/1024
+            self.request.send("sorry,空间不足[{}M]，请联系管理员".format(int(remaining_size)).encode())
     #下载文件
     def get(self,*args):
         cmd_dic = args[0]
@@ -81,9 +93,14 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         '''查看家目录文件'''
         cmd_dic = args[0]
         user_dir=user_basedir+cmd_dic["username"]+self.user_now_dir
-        filenames=str(os.listdir(user_dir))
-        self.request.send(filenames.encode())
-
+        filenames=os.listdir(user_dir)
+        data=[[],[]]
+        for i in filenames:
+            if os.path.isfile(user_dir+"/"+i):
+                data[1].append(i)
+            else:
+                data[0].append(i)
+        self.request.send(str(data).encode())
     def cd(self,*args):
         cmd_dic = args[0]
         dir= cmd_dic["dir"].strip()
@@ -107,6 +124,12 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 self.user_now_dir = "/".join(self.user_now_dir.split("/")[:-2])
         else:
             self.user_now_dir+=dir1
+    #获取目录的大小
+    def get_dir_size(self,filePath,size=0):
+        for root, dirs, files in os.walk(filePath):
+            for f in files:
+                size += os.path.getsize(os.path.join(root, f))
+        return size
 
     def handle(self):
         self.user_login()
@@ -130,8 +153,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                             format='%(asctime)s %(message)s',
                             datefmt='%m/%d/%Y %H:%M:%S %p')
         logging.info(info)
-if __name__ == "__main__":
+
+def run():
     HOST, PORT = "0.0.0.0", 9999
-    # Create the server, binding to localhost on port 9999
     server = socketserver.ThreadingTCPServer((HOST, PORT), MyTCPHandler)
     server.serve_forever()

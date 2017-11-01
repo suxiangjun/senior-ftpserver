@@ -8,16 +8,19 @@ class FtpClient(object):
         self.client=socket.socket()
         self.now_dir=None
     def help(self):
-        msg='''ls #查看文件
-pwd #查看当前迷路
-cd ../ #返回上一层目录
+        msg='''
+ls           #查看文件
+pwd          #查看当前迷路
+cd ../       #返回上一层目录
 get filename #下载文件
 put filename #上传文件
+q            #退出程序  
         '''
         print(msg)
+
     def connect(self,ip,port):
+        self.client.connect((ip, port))
         while True:
-            self.client.connect((ip,port))
             self.username=input("FTP账号：")
             self.client.send(self.username.encode())
             received1=eval(self.client.recv(1024).decode())
@@ -33,8 +36,8 @@ put filename #上传文件
                         d=str([self.username,self.password1])
                         self.client.send(d.encode())   #发送用户名和密码到服务端
                         print(self.client.recv(1024).decode())
-                        self.client.close()
-                        break
+                        self.help()
+                        self.interactive()
                 else:
                     print("输错3次，再见")
                     sys.exit()
@@ -66,12 +69,19 @@ put filename #上传文件
                 }
                 self.client.send(str(json.dumps(msg_dic)).encode("utf-8"))
                 server_response=self.client.recv(1024)
-                f=open(filename,"rb")
-                for line in f:
-                    self.client.send(line)
+                if server_response.decode().startswith("sorry"):
+                    print(server_response.decode())
                 else:
-                    print("file upload done")
-                    f.close()
+                    total=0
+                    f=open(filename,"rb")
+                    for line in f:
+                        self.client.send(line)
+                        total+=len(line)
+                        sys.stdout.write("\r{}>%{}".format("="*int(total/filesize*100),int(total/filesize*100)))
+                        sys.stdout.flush()
+                    else:
+                        print("file upload done")
+                        f.close()
     #下载文件
     def cmd_get(self,*args):
         cmd_split=args[0].split()
@@ -99,8 +109,9 @@ put filename #上传文件
                         revived_size += len(data)
                         m.update(data)  # 计算数据接收的MD5值
                         f.write(data)
+                        sys.stdout.write("\r{}>%{}".format("="*int(revived_size/file_total_size*100),int(revived_size*100/file_total_size)))
+                        sys.stdout.flush()
                     else:
-                        print(file_total_size, revived_size)
                         client_md5_vaule = m.hexdigest()  # 生成接收数据的MD5值16进制形式
                         self.client.send("ready to recv file md5 value".encode())
                         server_md5_value = self.client.recv(1024)  # 接收客户端的MD5值
@@ -118,8 +129,19 @@ put filename #上传文件
         }
         self.client.send(str(json.dumps(msg_dic)).encode("utf-8"))
         allfile=eval(self.client.recv(1024).decode())
-        for i in allfile:
-             print("\33[31m%s\33[0m"%i)
+        if allfile[0]:
+            if len(allfile[0])>1:
+                for j in allfile[0]:
+                    print("\33[31m%s\33[0m" % j)
+            else:
+                print("\33[31m%s\33[0m" % allfile[0][0])
+        if allfile[1]:
+            if len(allfile[1])>1:
+                for k in allfile[1]:
+                    print(k)
+            else:
+                print(allfile[1][0])
+    #切换目录
     def cmd_cd(self,*args):
         cmd_split=args[0].split()
         msg_dic = {
@@ -128,6 +150,7 @@ put filename #上传文件
         }
         self.client.send(str(json.dumps(msg_dic)).encode("utf-8"))
         self.cmd_ls()
+
     def cmd_pwd(self,*args):
         msg_dic = {
             "action": "pwd",
@@ -141,12 +164,12 @@ put filename #上传文件
         while True:
             cmd=input(">>").strip()
             if len(cmd)==0 or cmd=="cd":continue
+            elif cmd=="q":sys.exit()
             cmd_str=cmd.split()[0]
             if hasattr(self,"cmd_%s"%cmd_str):
                 func=getattr(self,"cmd_%s"%cmd_str)
                 func(cmd)
             else:
                 self.help()
-
 c=FtpClient()
 c.connect("localhost",9999)
